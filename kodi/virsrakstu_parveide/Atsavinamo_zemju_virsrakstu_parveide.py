@@ -1,20 +1,24 @@
 import csv
-import re
-from pathlib import Path
-import pandas as pd
+import shutil
 import sys
+import time
+from pathlib import Path
 from typing import Optional, List, Tuple
 
-# ====== Palīgfunkcijas ======
+import pandas as pd
+
+
+# ==========================================================
+# PALĪGFUNKCIJAS
+# ==========================================================
+
 def norm(s: str) -> str:
     """Normalizē nosaukumu salīdzināšanai: mazajiem, bez atstarpēm/pasvītrām."""
     return "".join(ch for ch in s.lower() if ch not in {" ", "_"})
 
+
 def find_child_dir(parent: Path, wanted_names) -> Optional[Path]:
-    """
-    Meklē bērna mapi pēc nosaukuma(-iem) neatkarīgi no reģistra un atstarpēm/pasvītrām.
-    wanted_names: str vai [str, ...]
-    """
+    """Meklē bērna mapi pēc nosaukuma neatkarīgi no reģistra/atstarpēm/pasvītrām."""
     if isinstance(wanted_names, str):
         wanted_names = [wanted_names]
 
@@ -29,36 +33,82 @@ def find_child_dir(parent: Path, wanted_names) -> Optional[Path]:
 
     return None
 
-# ====== Konfigurācija ======
+
+def wait_for_file_ready(file_path: Path, timeout_seconds: int = 60) -> bool:
+    """
+    Gaida, līdz fails eksistē, nav .crdownload un izmērs vairs nemainās.
+    """
+    end_time = time.time() + timeout_seconds
+    previous_size = -1
+
+    while time.time() < end_time:
+        if file_path.exists() and not Path(str(file_path) + ".crdownload").exists():
+            current_size = file_path.stat().st_size
+
+            if current_size > 0 and current_size == previous_size:
+                return True
+
+            previous_size = current_size
+
+        time.sleep(1)
+
+    return False
+
+
+def move_file_replace(source: Path, target: Path) -> None:
+    """Pārvieto failu, aizstājot esošo mērķa failu, ja tāds ir."""
+    if target.exists():
+        target.unlink()
+
+    shutil.move(str(source), str(target))
+
+
+# ==========================================================
+# KONFIGURĀCIJA
+# ==========================================================
+
 base = Path(r"C:\Users\hardijslans\Desktop\VISUAL STUDIO CODE")
+downloads_mape = Path(r"C:\Users\hardijslans\Downloads")
 
-# Meklē mapi "Atsavinamas_zemes" / "ATSAVINAMAS ZEMES"
-projekta_mape = find_child_dir(base, ["Atsavinamas_zemes", "ATSAVINAMAS ZEMES"])
+projekta_mape = find_child_dir(
+    base,
+    ["Atsavinamas_zemes", "ATSAVINAMAS ZEMES"]
+)
 
-if projekta_mape is not None:
-    projekts = projekta_mape
-else:
-    print("❌ Neatradu projektu mapi 'Atsavinamas_zemes' / 'ATSAVINAMAS ZEMES' zem:", base)
+if projekta_mape is None:
+    print("❌ Neatradu projektu mapi zem:", base)
     sys.exit(1)
 
-# Atrodam apakšmapes
-sakuma_mape = find_child_dir(projekta_mape, ["Sakuma_datnes", "Sākuma_datnes"])
+projekts = projekta_mape
 
-if not sakuma_mape:
-    print("❌ Neatradu mapi 'Sakuma_datnes' projektā:", projekta_mape)
+sakuma_mape = find_child_dir(
+    projekts,
+    ["Sakuma_datnes", "Sākuma_datnes"]
+)
+
+if sakuma_mape is None:
+    print("❌ Neatradu mapi 'Sakuma_datnes' projektā:", projekts)
     sys.exit(1)
 
-publ_mape = find_child_dir(projekta_mape, ["Datnes_publicesanai", "Datnes_publicēšanai"])
+publ_mape = find_child_dir(
+    projekts,
+    ["Datnes_publicesanai", "Datnes_publicēšanai"]
+)
 
-if not publ_mape:
+if publ_mape is None:
     publ_mape = projekts / "Datnes_publicesanai"
     publ_mape.mkdir(parents=True, exist_ok=True)
 
-print("📁 Projekts:", projekts)
-print("📥 Ievade :", sakuma_mape)
-print("📤 Izvade :", publ_mape)
+print("📁 Projekts :", projekts)
+print("⬇ Downloads:", downloads_mape)
+print("📥 Ievade  :", sakuma_mape)
+print("📤 Izvade  :", publ_mape)
 
-# Failu saraksts un virsrakstu aizstāšana
+
+# ==========================================================
+# FAILU SHĒMAS
+# ==========================================================
+
 faili_info = {
     "1_pielikums.csv": [
         "AdmtKind",
@@ -76,9 +126,8 @@ faili_info = {
         "ParPrice",
         "ParcelTotalArea",
         "TotalCadVal",
-        "TotDispPric"
+        "TotDispPric",
     ],
-
     "2_pielikums.csv": [
         "AdmtKind",
         "AdmtKindTer",
@@ -90,15 +139,52 @@ faili_info = {
         "ParcelArea",
         "ParPrice",
         "Date",
-        "EndDate"
+        "EndDate",
     ],
 }
 
+
 kopsavilkums: List[Tuple[str, str, str]] = []
 
-# ====== Apstrāde ======
-for fails, jaunie_virsraksti in faili_info.items():
 
+# ==========================================================
+# 1. FAILU PĀRVIETOŠANA NO DOWNLOADS UZ SAKUMA_DATNES
+# ==========================================================
+
+print("\n==============================")
+print("FAILU PĀRVIETOŠANA")
+print("==============================")
+
+for fails in faili_info.keys():
+    source = downloads_mape / fails
+    target = sakuma_mape / fails
+
+    print(f"\n📦 Pārbaudu: {source}")
+
+    if not wait_for_file_ready(source, timeout_seconds=60):
+        msg = f"Fails nav atrasts vai nav gatavs lejupielādēšanai: {source}"
+        print(f"❌ {msg}")
+        kopsavilkums.append((fails, "FAIL", msg))
+        continue
+
+    try:
+        move_file_replace(source, target)
+        print(f"✅ Pārvietots → {target}")
+    except Exception as e:
+        msg = f"Neizdevās pārvietot failu: {e}"
+        print(f"❌ {msg}")
+        kopsavilkums.append((fails, "FAIL", msg))
+
+
+# ==========================================================
+# 2. CSV VIRSRĀKSTU PĀRVEIDE
+# ==========================================================
+
+print("\n==============================")
+print("CSV VIRSRĀKSTU PĀRVEIDE")
+print("==============================")
+
+for fails, jaunie_virsraksti in faili_info.items():
     orig_cels = sakuma_mape / fails
     jaunais_cels = publ_mape / f"parveidots_{fails}"
 
@@ -110,7 +196,6 @@ for fails, jaunie_virsraksti in faili_info.items():
         kopsavilkums.append((fails, "FAIL", msg))
         continue
 
-    # 1) Nolasīšana
     try:
         df = pd.read_csv(
             orig_cels,
@@ -119,31 +204,23 @@ for fails, jaunie_virsraksti in faili_info.items():
             sep=";"
         )
 
-        print("✅ 1. daļa: dati nolasīti.")
+        print("✅ Dati nolasīti.")
 
     except Exception as e:
-        print(f"❌ Nevar nolasīt {fails}: {e}")
-        kopsavilkums.append((fails, "FAIL", f"Nolasīšana: {e}"))
+        msg = f"Nolasīšana: {e}"
+        print(f"❌ {msg}")
+        kopsavilkums.append((fails, "FAIL", msg))
         continue
 
-    # 2) Datumu apstrāde IZŅEMTA
-
-    # 3) Virsrakstu validācija + saglabāšana
     try:
-
         if len(df.columns) != len(jaunie_virsraksti):
             raise ValueError(
                 f"Kolonnu skaits nesakrīt: "
                 f"failā={len(df.columns)} vs shēmā={len(jaunie_virsraksti)}"
             )
 
-        # Aizstājam kolonnu nosaukumus
         df.columns = jaunie_virsraksti
 
-        # Saglabājam:
-        # - UTF-8 BOM
-        # - komats kā atdalītājs
-        # - visas kolonnas un vērtības pēdiņās
         df.to_csv(
             jaunais_cels,
             index=False,
@@ -152,21 +229,30 @@ for fails, jaunie_virsraksti in faili_info.items():
             quoting=csv.QUOTE_ALL
         )
 
-        print(f"✅ 3. daļa: saglabāts → {jaunais_cels}")
+        print(f"✅ Saglabāts → {jaunais_cels}")
 
         kopsavilkums.append(
             (fails, "OK", f"Saglabāts: {jaunais_cels.name}")
         )
 
     except Exception as e:
-        print(f"❌ Neizdevās saglabāt {fails}: {e}")
+        msg = f"Saglabāšana: {e}"
+        print(f"❌ {msg}")
+        kopsavilkums.append((fails, "FAIL", msg))
 
-        kopsavilkums.append(
-            (fails, "FAIL", f"Saglabāšana: {e}")
-        )
 
-# ====== Kopsavilkums ======
-print("\n— KOPSAVILKUMS —")
+# ==========================================================
+# KOPSAVILKUMS + EXIT CODE
+# ==========================================================
+
+print("\n==============================")
+print("KOPSAVILKUMS")
+print("==============================")
 
 for nosaukums, statuss, inf in kopsavilkums:
     print(f"{nosaukums}: {statuss} – {inf}")
+
+if any(statuss == "FAIL" for _, statuss, _ in kopsavilkums):
+    sys.exit(1)
+
+sys.exit(0)
