@@ -3,6 +3,6 @@
 Šeit glabāju dažādus Python skriptus:
 
 ## Struktūra
-- scripts/ — automatizācija un vienkārši skripti
+- kodi/ — automatizācija un vienkārši skripti
 - data_analysis/ — datu apstrāde
 - utils/ — palīgfunkcijas
