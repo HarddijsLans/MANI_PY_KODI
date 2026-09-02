@@ -1,0 +1,16 @@
+{
+  "publications": [
+    {
+      "enabled": true,
+      "name": "1. Daudzdzīvokļu māju atsavināmā zeme un cena",
+      "resource_id": "8e4ee339-494c-4048-a21b-71e4a8c6c04e",
+      "local_file": "C:\\Users\\hardijslans\\Desktop\\VISUAL STUDIO CODE\\ATSAVINAMAS ZEMES\\Datnes_publicesanai\\parveidots_1_pielikums.csv"
+    },
+    {
+      "enabled": true,
+      "name": "2. Atsavināmā zeme un cena dzīvokļa īpašumam",
+      "resource_id": "a2344bd2-b94c-41af-9349-06a10a86fa48",
+      "local_file": "C:\\Users\\hardijslans\\Desktop\\VISUAL STUDIO CODE\\ATSAVINAMAS ZEMES\\Datnes_publicesanai\\parveidots_2_pielikums.csv"
+    }
+  ]
+}
